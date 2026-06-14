@@ -1,45 +1,23 @@
-# Python
+# Environment Variables
+.env
+.env.*
+!.env.example
+
+# Python dependencies and cache
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.venv/
+*.py[cod]
 venv/
 env/
 
-# Environment
-.env
-*.env.local
+# Node dependencies
+node_modules/
+dist/
+build/
 
 # Database
 *.db
-mantis.db
+*.sqlite3
 
-# Vector DB
-chroma_db/
-
-# Node
-node_modules/
-dist/
-.cache/
-
-# Uploads (keep folder, ignore contents)
-backend/uploads/*
-!backend/uploads/.gitkeep
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-
-# Logs
-*.log
-npm-debug.log*
-
-# Build
-build/
-out/
+# Local Uploads and Vector Store
+backend/uploads/
+backend/chroma_db/
