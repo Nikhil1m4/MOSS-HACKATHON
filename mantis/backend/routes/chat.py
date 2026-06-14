@@ -106,7 +106,7 @@ def register_user(payload: UserRegisterRequest, db: Session = Depends(get_db)):
     db.refresh(user)
 
     token = create_access_token({"user_id": user.id})
-    return UserAuthResponse(token=token, user=UserOut.from_orm(user))
+    return UserAuthResponse(token=token, user=UserOut.model_validate(user))
 
 
 @router.post("/auth/user/login", response_model=UserAuthResponse)
@@ -120,7 +120,7 @@ def login_user(payload: UserLoginRequest, db: Session = Depends(get_db)):
         )
 
     token = create_access_token({"user_id": user.id})
-    return UserAuthResponse(token=token, user=UserOut.from_orm(user))
+    return UserAuthResponse(token=token, user=UserOut.model_validate(user))
 
 
 # ---------------------------------------------------------------------------

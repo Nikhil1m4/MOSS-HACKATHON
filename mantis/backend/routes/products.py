@@ -21,6 +21,13 @@ class ProductCreateRequest(BaseModel):
     image_url: Optional[str] = None
 
 
+class ProductUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+
+
 class CompanyInfo(BaseModel):
     id: int
     name: str
@@ -115,3 +122,59 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
             detail="Product not found.",
         )
     return product
+
+
+@router.put("/products/{product_id}", response_model=ProductOut)
+def update_product(
+    product_id: int,
+    payload: ProductUpdateRequest,
+    db: Session = Depends(get_db),
+    current_company: models.Company = Depends(get_current_company),
+):
+    """Update a product owned by the authenticated company."""
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+    if product.company_id != current_company.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this product.")
+
+    if payload.name is not None:
+        product.name = payload.name
+    if payload.category is not None:
+        product.category = payload.category
+    if payload.description is not None:
+        product.description = payload.description
+    if payload.image_url is not None:
+        product.image_url = payload.image_url
+
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@router.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_company: models.Company = Depends(get_current_company),
+):
+    """Delete a product and all its documents/sessions owned by the authenticated company."""
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+    if product.company_id != current_company.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not own this product.")
+
+    # SQLAlchemy cascades should handle relations if configured, 
+    # but we can manually delete documents and chat sessions here to be safe.
+    db.query(models.Document).filter(models.Document.product_id == product_id).delete()
+    
+    # Also delete chat sessions (and their messages via cascade or manual)
+    sessions = db.query(models.ChatSession).filter(models.ChatSession.product_id == product_id).all()
+    for session in sessions:
+        db.query(models.ChatMessage).filter(models.ChatMessage.session_id == session.id).delete()
+    db.query(models.ChatSession).filter(models.ChatSession.product_id == product_id).delete()
+
+    db.delete(product)
+    db.commit()
+    return None

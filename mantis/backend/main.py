@@ -3,6 +3,7 @@ from pathlib import Path
 
 import uvicorn
 from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +24,7 @@ app = FastAPI(
     title="Mantis API",
     description="AI-powered product support chatbot platform",
     version="1.0.0",
+    lifespan=lambda app: lifespan(app),
 )
 
 # ---------------------------------------------------------------------------
@@ -55,8 +57,8 @@ app.include_router(chat_router, prefix="")
 UPLOADS_DIR = Path(__file__).resolve().parent / "uploads"
 
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Create DB tables and ensure the uploads directory exists on startup."""
     # Create all SQLAlchemy tables
     Base.metadata.create_all(bind=engine)
@@ -64,6 +66,7 @@ async def startup_event():
     # Ensure uploads directory exists
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     print("[INFO] Mantis API started. DB tables created. Uploads directory ready.")
+    yield
 
 
 # Mount the uploads directory so files are accessible at /uploads/<filename>

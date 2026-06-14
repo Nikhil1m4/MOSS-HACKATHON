@@ -63,7 +63,7 @@ def register_company(payload: CompanyRegisterRequest, db: Session = Depends(get_
     db.refresh(company)
 
     token = create_access_token({"company_id": company.id})
-    return CompanyAuthResponse(token=token, company=CompanyOut.from_orm(company))
+    return CompanyAuthResponse(token=token, company=CompanyOut.model_validate(company))
 
 
 @router.post("/auth/company/login", response_model=CompanyAuthResponse)
@@ -77,4 +77,4 @@ def login_company(payload: CompanyLoginRequest, db: Session = Depends(get_db)):
         )
 
     token = create_access_token({"company_id": company.id})
-    return CompanyAuthResponse(token=token, company=CompanyOut.from_orm(company))
+    return CompanyAuthResponse(token=token, company=CompanyOut.model_validate(company))
