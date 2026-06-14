@@ -1,4 +1,5 @@
 import os
+import json
 from typing import List, Optional
 
 import google.generativeai as genai
@@ -15,6 +16,7 @@ from auth import (
     get_optional_user,
 )
 import models
+from tree_models import DiagnosticTree, DiagnosticSession
 from rag.vectorstore import search_documents
 
 load_dotenv()
@@ -124,6 +126,48 @@ def login_user(payload: UserLoginRequest, db: Session = Depends(get_db)):
 
 
 # ---------------------------------------------------------------------------
+# Symptom Router Helper
+# ---------------------------------------------------------------------------
+
+def route_symptom(message: str, product_id: int, db: Session) -> Optional[DiagnosticTree]:
+    """
+    Finds the most relevant diagnostic tree for the given symptom.
+    """
+    trees = db.query(DiagnosticTree).filter(
+        DiagnosticTree.product_id == product_id,
+        DiagnosticTree.status == "published"
+    ).all()
+    
+    if not trees:
+        return None
+        
+    message_lower = message.lower()
+    for tree in trees:
+        if tree.symptom and tree.symptom.lower() in message_lower:
+            return tree
+            
+    return trees[0]
+
+def format_leaf_node(node: dict) -> str:
+    diagnosis = node.get("diagnosis", "Unknown Diagnosis")
+    action = node.get("action", "")
+    reference = node.get("reference", "")
+    
+    response = f"**Diagnosis:**\n{diagnosis}\n\n**Action:**\n{action}"
+    if reference:
+        response += f"\n\n**Reference:**\n{reference}"
+        
+    media = node.get("media")
+    if media and isinstance(media, dict):
+        url = media.get("url", "")
+        if media.get("type") == "video":
+            response += f"\n\n[Watch Repair Video]({url})"
+        else:
+            response += f"\n\n[View Media]({url})"
+            
+    return response
+
+# ---------------------------------------------------------------------------
 # Chat Route
 # ---------------------------------------------------------------------------
 
@@ -154,6 +198,10 @@ def chat(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Chat session not found.",
             )
+            
+        diag_session = db.query(DiagnosticSession).filter(
+            DiagnosticSession.session_id == session.id
+        ).first()
     else:
         session = models.ChatSession(
             user_id=current_user.id if current_user else None,
@@ -162,6 +210,8 @@ def chat(
         db.add(session)
         db.commit()
         db.refresh(session)
+        
+        diag_session = None
 
     # Persist the user message
     user_message = models.ChatMessage(
@@ -171,6 +221,74 @@ def chat(
     )
     db.add(user_message)
     db.commit()
+
+    # --- HYBRID ARCHITECTURE: TREE FIRST ---
+    
+    if not diag_session:
+        tree = route_symptom(payload.message, product_id, db)
+        if tree:
+            tree_data = json.loads(tree.tree_json)
+            root_node_id = tree_data.get("root")
+            
+            diag_session = DiagnosticSession(
+                session_id=session.id,
+                product_id=product_id,
+                user_id=current_user.id if current_user else None,
+                tree_id=tree.id,
+                current_node=root_node_id,
+                status="active"
+            )
+            db.add(diag_session)
+            db.commit()
+            db.refresh(diag_session)
+
+    if diag_session and diag_session.status == "active":
+        tree = db.query(DiagnosticTree).filter(DiagnosticTree.id == diag_session.tree_id).first()
+        if tree:
+            tree_data = json.loads(tree.tree_json)
+            nodes = tree_data.get("nodes", {})
+            current_node = nodes.get(diag_session.current_node)
+            
+            if current_node:
+                if payload.session_id and current_node.get("type") == "question":
+                    options = current_node.get("options", {})
+                    user_ans = payload.message.strip().lower()
+                    
+                    next_node_id = None
+                    for opt, tgt in options.items():
+                        if opt.lower() == user_ans:
+                            next_node_id = tgt
+                            break
+                            
+                    if next_node_id and next_node_id in nodes:
+                        diag_session.current_node = next_node_id
+                        db.commit()
+                        current_node = nodes.get(next_node_id)
+                    else:
+                        diag_session.status = "fallback"
+                        db.commit()
+                        current_node = None 
+
+            if current_node:
+                if current_node.get("type") == "question":
+                    options_text = " / ".join(current_node.get("options", {}).keys())
+                    assistant_text = f"{current_node.get('text')}\n\n[{options_text}]"
+                elif current_node.get("type") == "leaf":
+                    assistant_text = format_leaf_node(current_node)
+                    diag_session.status = "resolved"
+                    diag_session.final_diagnosis = current_node.get("diagnosis")
+                    db.commit()
+                
+                assistant_message = models.ChatMessage(
+                    session_id=session.id,
+                    role="assistant",
+                    content=assistant_text,
+                )
+                db.add(assistant_message)
+                db.commit()
+                return ChatResponse(response=assistant_text, session_id=session.id)
+
+    # --- FALLBACK: RAG + GEMINI ---
 
     # Retrieve relevant document context from the vector store
     context = search_documents(payload.message, product_id)

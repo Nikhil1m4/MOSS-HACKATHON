@@ -25,16 +25,15 @@ export default function UploadMaterials() {
   const [loadingPage, setLoadingPage] = useState(true);
   const [error, setError] = useState('');
 
-  // File upload state
-  const [file, setFile] = useState(null);
+  // File upload state (support multiple files)
+  const [files, setFiles] = useState([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const [fileMsg, setFileMsg] = useState('');
   const [fileMsgType, setFileMsgType] = useState('');
   const fileInputRef = useRef(null);
 
-  // Link upload state
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkType, setLinkType] = useState('link');
+  // Link upload state (support multiple links)
+  const [links, setLinks] = useState([{ url: '', type: 'link', text: '' }]);
   const [uploadingLink, setUploadingLink] = useState(false);
   const [linkMsg, setLinkMsg] = useState('');
   const [linkMsgType, setLinkMsgType] = useState('');
@@ -63,18 +62,18 @@ export default function UploadMaterials() {
 
   const handleFileUpload = async (e) => {
     e.preventDefault();
-    if (!file) { setFileMsg('Please select a file first.'); setFileMsgType('error'); return; }
+    if (!files || files.length === 0) { setFileMsg('Please select at least one file.'); setFileMsgType('error'); return; }
     setUploadingFile(true);
     setFileMsg('');
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      files.forEach(f => formData.append('files', f));
       await api.post(`/products/${productId}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setFileMsg(`"${file.name}" uploaded successfully!`);
+      setFileMsg(`Uploaded ${files.length} file(s) successfully!`);
       setFileMsgType('success');
-      setFile(null);
+      setFiles([]);
       if (fileInputRef.current) fileInputRef.current.value = '';
       await fetchData();
     } catch (err) {
@@ -87,19 +86,23 @@ export default function UploadMaterials() {
 
   const handleLinkUpload = async (e) => {
     e.preventDefault();
-    if (!linkUrl.trim()) { setLinkMsg('Please enter a URL.'); setLinkMsgType('error'); return; }
+    const validLinks = links.filter(l => l.url && l.url.trim());
+    if (validLinks.length === 0) { setLinkMsg('Please enter at least one URL.'); setLinkMsgType('error'); return; }
     setUploadingLink(true);
     setLinkMsg('');
     try {
       const formData = new FormData();
-      formData.append('link_url', linkUrl.trim());
-      formData.append('link_type', linkType);
+      validLinks.forEach(l => {
+        formData.append('link_urls', l.url.trim());
+        formData.append('link_types', l.type || 'link');
+        formData.append('link_texts', l.text ? l.text.trim() : '');
+      });
       await api.post(`/products/${productId}/upload`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setLinkMsg('Link added successfully!');
+      setLinkMsg('Link(s) added successfully!');
       setLinkMsgType('success');
-      setLinkUrl('');
+      setLinks([{ url: '', type: 'link', text: '' }]);
       await fetchData();
     } catch (err) {
       setLinkMsg(err.response?.data?.detail || 'Failed to add link.');
@@ -195,61 +198,61 @@ export default function UploadMaterials() {
 
               <form onSubmit={handleFileUpload} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div
-                  style={{
-                    border: '2px dashed rgba(167,139,250,0.25)',
-                    borderRadius: '12px', padding: '1.5rem',
-                    textAlign: 'center', cursor: 'pointer',
-                    background: 'rgba(167,139,250,0.03)',
-                    transition: 'all 0.2s',
-                  }}
-                  onClick={() => fileInputRef.current?.click()}
-                  onDragOver={e => e.preventDefault()}
-                  onDrop={e => {
-                    e.preventDefault();
-                    const f = e.dataTransfer.files[0];
-                    if (f) setFile(f);
-                  }}
-                >
-                  {file ? (
-                    <div>
-                      <div style={{ fontSize: '1.5rem', marginBottom: '0.4rem' }}>
-                        {file.name.endsWith('.pdf') ? '📄' : '🖼️'}
+                    style={{
+                      border: '2px dashed rgba(167,139,250,0.25)',
+                      borderRadius: '12px', padding: '1.5rem',
+                      textAlign: 'center', cursor: 'pointer',
+                      background: 'rgba(167,139,250,0.03)',
+                      transition: 'all 0.2s',
+                    }}
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => {
+                      e.preventDefault();
+                      const f = e.dataTransfer.files;
+                      if (f && f.length) setFiles(prev => [...prev, ...Array.from(f)]);
+                    }}
+                  >
+                    {files && files.length > 0 ? (
+                      <div>
+                        <div style={{ fontSize: '1rem', marginBottom: '0.4rem' }}>📁 {files.length} file(s) selected</div>
+                        <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}> 
+                          {files.map((f, i) => (
+                            <div key={i} style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{f.name} • {(f.size/1024/1024).toFixed(2)} MB</div>
+                          ))}
+                        </div>
                       </div>
-                      <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 600 }}>{file.name}</div>
-                      <div style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>☁️</div>
+                        <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                          Drop files here or <span style={{ color: '#a78bfa', fontWeight: 600 }}>browse</span>
+                        </div>
+                        <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: '0.3rem' }}>
+                          PDF, JPG, PNG, WEBP
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div>
-                      <div style={{ fontSize: '2rem', marginBottom: '0.5rem', opacity: 0.5 }}>☁️</div>
-                      <div style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-                        Drop file here or <span style={{ color: '#a78bfa', fontWeight: 600 }}>browse</span>
-                      </div>
-                      <div style={{ color: '#475569', fontSize: '0.75rem', marginTop: '0.3rem' }}>
-                        PDF, JPG, PNG, WEBP
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <input
-                  id="file-input"
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
-                  onChange={e => setFile(e.target.files[0] || null)}
-                  style={{ display: 'none' }}
-                />
+                    )}
+                  </div>
+                  <input
+                    id="file-input"
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.jpg,.jpeg,.png,.gif,.webp"
+                    multiple
+                    onChange={e => setFiles(prev => [...prev, ...Array.from(e.target.files || [])])}
+                    style={{ display: 'none' }}
+                  />
                 <button
                   id="upload-file-btn"
                   type="submit"
-                  disabled={uploadingFile || !file}
-                  style={submitBtnStyle(uploadingFile || !file)}
-                  onMouseEnter={e => { if (!uploadingFile && file) e.currentTarget.style.opacity = '0.88'; }}
+                  disabled={uploadingFile || files.length === 0}
+                  style={submitBtnStyle(uploadingFile || files.length === 0)}
+                  onMouseEnter={e => { if (!uploadingFile && files.length) e.currentTarget.style.opacity = '0.88'; }}
                   onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
                 >
                   {uploadingFile && <Spinner />}
-                  {uploadingFile ? 'Uploading…' : 'Upload File'}
+                  {uploadingFile ? 'Uploading…' : `Upload ${files.length || ''} File(s)`}
                 </button>
               </form>
             </div>
@@ -273,48 +276,50 @@ export default function UploadMaterials() {
               )}
 
               <form onSubmit={handleLinkUpload} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div>
-                  <label style={labelStyle}>LINK TYPE</label>
-                  <select
-                    id="link-type-select"
-                    value={linkType}
-                    onChange={e => setLinkType(e.target.value)}
-                    style={{ ...inputStyle, cursor: 'pointer' }}
-                    onFocus={e => e.target.style.borderColor = 'rgba(167,139,250,0.6)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(167,139,250,0.2)'}
+                  {links.map((l, idx) => (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', background: 'rgba(255,255,255,0.02)', padding: '0.75rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <select
+                          value={l.type}
+                          onChange={e => setLinks(prev => prev.map((p, i) => i === idx ? { ...p, type: e.target.value } : p))}
+                          style={{ ...inputStyle, width: '36%' }}
+                        >
+                          {LINK_TYPES.map(lt => (
+                            <option key={lt.value} value={lt.value}>{lt.label}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="url"
+                          value={l.url}
+                          onChange={e => setLinks(prev => prev.map((p, i) => i === idx ? { ...p, url: e.target.value } : p))}
+                          placeholder="https://…"
+                          style={{ ...inputStyle, flex: 1 }}
+                        />
+                        <button type="button" onClick={() => setLinks(prev => prev.filter((_, i) => i !== idx))} style={{ padding: '0.5rem', borderRadius: '8px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.15)', color: '#f87171' }}>Remove</button>
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={50}
+                        value={l.text || ''}
+                        onChange={e => setLinks(prev => prev.map((p, i) => i === idx ? { ...p, text: e.target.value } : p))}
+                        placeholder="Link title or description (optional, max 50 chars)"
+                        style={inputStyle}
+                      />
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button type="button" onClick={() => setLinks(prev => [...prev, { url: '', type: 'link', text: '' }])} style={{ padding: '0.6rem', borderRadius: '8px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>+ Add another link</button>
+                    <div style={{ flex: 1 }} />
+                  </div>
+                  <button
+                    id="add-link-btn"
+                    type="submit"
+                    disabled={uploadingLink || links.every(l => !l.url.trim())}
+                    style={submitBtnStyle(uploadingLink || links.every(l => !l.url.trim()))}
                   >
-                    {LINK_TYPES.map(lt => (
-                      <option key={lt.value} value={lt.value} style={{ background: '#1a1a2e' }}>
-                        {lt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>URL</label>
-                  <input
-                    id="link-url-input"
-                    type="url"
-                    value={linkUrl}
-                    onChange={e => setLinkUrl(e.target.value)}
-                    required
-                    placeholder="https://…"
-                    style={inputStyle}
-                    onFocus={e => e.target.style.borderColor = 'rgba(167,139,250,0.6)'}
-                    onBlur={e => e.target.style.borderColor = 'rgba(167,139,250,0.2)'}
-                  />
-                </div>
-                <button
-                  id="add-link-btn"
-                  type="submit"
-                  disabled={uploadingLink || !linkUrl.trim()}
-                  style={submitBtnStyle(uploadingLink || !linkUrl.trim())}
-                  onMouseEnter={e => { if (!uploadingLink && linkUrl.trim()) e.currentTarget.style.opacity = '0.88'; }}
-                  onMouseLeave={e => { e.currentTarget.style.opacity = '1'; }}
-                >
-                  {uploadingLink && <Spinner />}
-                  {uploadingLink ? 'Adding…' : 'Add Link'}
-                </button>
+                    {uploadingLink && <Spinner />}
+                    {uploadingLink ? 'Adding…' : `Add ${links.filter(l=>l.url.trim()).length || ''} Link(s)`}
+                  </button>
               </form>
             </div>
           </div>
@@ -355,20 +360,33 @@ export default function UploadMaterials() {
                           {meta.label}
                         </div>
                       </div>
-                      <a
-                        href={href} target="_blank" rel="noopener noreferrer"
-                        style={{
-                          color: '#64748b', fontSize: '0.75rem',
-                          textDecoration: 'none', padding: '0.3rem 0.6rem',
-                          background: 'rgba(255,255,255,0.05)',
-                          borderRadius: '6px', border: '1px solid rgba(255,255,255,0.07)',
-                          transition: 'all 0.2s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.color = '#a78bfa'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.3)'; }}
-                        onMouseLeave={e => { e.currentTarget.style.color = '#64748b'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.07)'; }}
-                      >
-                        Open ↗
-                      </a>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <a
+                          href={href} target="_blank" rel="noopener noreferrer"
+                          style={{
+                            color: '#64748b', fontSize: '0.75rem',
+                            textDecoration: 'none', padding: '0.3rem 0.6rem',
+                            background: 'rgba(255,255,255,0.05)',
+                            borderRadius: '6px', border: '1px solid rgba(255,255,255,0.07)',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          Open ↗
+                        </a>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await api.delete(`/documents/${doc.id}`);
+                              await fetchData();
+                            } catch (err) {
+                              alert(err.response?.data?.detail || 'Failed to delete document');
+                            }
+                          }}
+                          style={{ padding: '0.35rem 0.6rem', borderRadius: '6px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.12)', color: '#f87171' }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   );
                 })}

@@ -39,6 +39,18 @@ export default function Dashboard() {
     fetchProducts();
   }, [navigate]);
 
+  const handleDeleteProduct = async (productId, productName) => {
+    if (!window.confirm(`Are you sure you want to delete "${productName}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/products/${productId}`);
+      setProducts(prev => prev.filter(p => p.id !== productId));
+    } catch (err) {
+      alert(err.response?.data?.detail || 'Failed to delete product.');
+    }
+  };
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0a14' }}>
       <Sidebar />
@@ -162,6 +174,7 @@ export default function Dashboard() {
                   key={product.id}
                   product={product}
                   onUpload={() => navigate(`/upload/${product.id}`)}
+                  onDelete={() => handleDeleteProduct(product.id, product.name)}
                 />
               ))}
             </div>
@@ -172,7 +185,7 @@ export default function Dashboard() {
   );
 }
 
-function ProductDashCard({ product, onUpload }) {
+function ProductDashCard({ product, onUpload, onDelete }) {
   const [hovered, setHovered] = useState(false);
   const [imgError, setImgError] = useState(false);
   const imgSrc = (!imgError && product.image_url)
@@ -227,12 +240,12 @@ function ProductDashCard({ product, onUpload }) {
           </p>
         )}
 
-        <div style={{ display: 'flex', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', gap: '0.4rem' }}>
           <button
             id={`upload-btn-${product.id}`}
             onClick={onUpload}
             style={{
-              flex: 1, padding: '0.6rem',
+              flex: 2, padding: '0.6rem',
               background: 'linear-gradient(135deg, #7c3aed, #0891b2)',
               border: 'none', borderRadius: '8px',
               color: 'white', fontWeight: 600,
@@ -243,7 +256,7 @@ function ProductDashCard({ product, onUpload }) {
             onMouseEnter={e => e.currentTarget.style.opacity = '0.85'}
             onMouseLeave={e => e.currentTarget.style.opacity = '1'}
           >
-            📁 Upload Materials
+            📁 Upload
           </button>
           <a
             id={`view-product-${product.id}`}
@@ -267,6 +280,24 @@ function ProductDashCard({ product, onUpload }) {
           >
             👁 View
           </a>
+          <button
+            onClick={onDelete}
+            style={{
+              flex: 1, padding: '0.6rem',
+              background: 'rgba(248,113,113,0.05)',
+              border: '1px solid rgba(248,113,113,0.15)',
+              borderRadius: '8px',
+              color: '#f87171', fontWeight: 600,
+              fontSize: '0.8rem', cursor: 'pointer',
+              fontFamily: 'Inter, sans-serif',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(248,113,113,0.15)'; e.currentTarget.style.color = '#fecaca'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(248,113,113,0.05)'; e.currentTarget.style.color = '#f87171'; }}
+          >
+            🗑 Delete
+          </button>
         </div>
       </div>
     </div>

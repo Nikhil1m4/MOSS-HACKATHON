@@ -15,6 +15,7 @@ from routes.companies import router as companies_router
 from routes.products import router as products_router
 from routes.uploads import router as uploads_router
 from routes.chat import router as chat_router
+from routes.trees import router as trees_router
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -49,6 +50,7 @@ app.include_router(companies_router, prefix="")
 app.include_router(products_router, prefix="")
 app.include_router(uploads_router, prefix="")
 app.include_router(chat_router, prefix="")
+app.include_router(trees_router, prefix="")
 
 # ---------------------------------------------------------------------------
 # Static file serving for uploads
